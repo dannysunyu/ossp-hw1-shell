@@ -30,6 +30,9 @@ int cmd_help(struct tokens *tokens);
 int cmd_pwd(struct tokens *tokens);
 int cmd_cd(struct tokens *tokens);
 
+void launch_process(struct tokens *tokens);
+int execute_cmd(struct tokens *tokens);
+
 /* Built-in command functions take token array (see parse.h) and return int */
 typedef int cmd_fun_t(struct tokens *tokens);
 
@@ -135,7 +138,8 @@ int main(int argc, char *argv[]) {
       cmd_table[fundex].fun(tokens);
     } else {
       /* REPLACE this to run commands as programs. */
-      fprintf(stdout, "This shell doesn't know how to run programs.\n");
+//      fprintf(stdout, "This shell doesn't know how to run programs.\n");
+      launch_process(tokens);
     }
 
     if (shell_is_interactive)
@@ -148,3 +152,31 @@ int main(int argc, char *argv[]) {
 
   return 0;
 }
+
+void launch_process(struct tokens *tokens) {
+  pid_t pid = fork();
+
+  if (pid == 0) { /* Child */
+    if (execute_cmd(tokens) == -1) {
+      fprintf(stdout, "This shell doesn't know how to run programs.\n");
+      exit(1);
+    }
+  } else { /* Parent */
+    wait(NULL);
+  }
+}
+
+int execute_cmd(struct tokens *tokens) {
+  size_t cmd_line_length = tokens_get_length(tokens);
+  char *cmd_argv[cmd_line_length + 1];
+
+  for (int i = 0; i < cmd_line_length; i++) {
+    cmd_argv[i] = tokens_get_token(tokens, i);
+  }
+  /* The last element of this array must be a null pointer */
+  cmd_argv[cmd_line_length] = NULL;
+
+  return execv(cmd_argv[0], cmd_argv);
+}
+
+
