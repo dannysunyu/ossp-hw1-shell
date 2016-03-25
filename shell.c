@@ -9,6 +9,7 @@
 #include <sys/wait.h>
 #include <termios.h>
 #include <unistd.h>
+#include <errno.h>
 
 #include "tokenizer.h"
 
@@ -66,8 +67,16 @@ int cmd_pwd(struct tokens *tokens) {
 
 /* Changes working directory */
 int cmd_cd(struct tokens *tokens) {
-  chdir(tokens_get_token(tokens, 1));
-  cmd_pwd(tokens);
+  char *target_dir = tokens_get_token(tokens, 1);
+  char error_msg[128];
+
+  if (chdir(target_dir) == 0) {
+    cmd_pwd(tokens);
+  } else {
+    sprintf(error_msg, "cd: %s", target_dir);
+    perror(error_msg);
+  }
+
   return 1;
 }
 
@@ -79,7 +88,7 @@ int lookup(char cmd[]) {
   return -1;
 }
 
-/* Intialization procedures for this shell */
+/* Initialization procedures for this shell */
 void init_shell() {
   /* Our shell is connected to standard input. */
   shell_terminal = STDIN_FILENO;
