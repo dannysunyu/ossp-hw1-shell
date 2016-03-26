@@ -33,6 +33,8 @@ int cmd_cd(struct tokens *tokens);
 void launch_process(struct tokens *tokens);
 int execute_cmd(struct tokens *tokens);
 
+bool cmd_pathname_needs_resolution(char *cmd);
+
 /* Built-in command functions take token array (see parse.h) and return int */
 typedef int cmd_fun_t(struct tokens *tokens);
 
@@ -171,10 +173,44 @@ int execute_cmd(struct tokens *tokens) {
   for (int i = 0; i < cmd_line_length; i++) {
     cmd_argv[i] = tokens_get_token(tokens, i);
   }
-  /* The last element of this array must be a null pointer */
+  /* execv requires the last element of this array must be a null pointer */
   cmd_argv[cmd_line_length] = NULL;
 
-  return execv(cmd_argv[0], cmd_argv);
+  if (cmd_pathname_needs_resolution(cmd_argv[0])) {
+    char *path_env = getenv("PATH");
+    char *each_dir = NULL;
+    char full_path_cmd[256];
+
+    while ((each_dir = strsep(&path_env, ":")) != NULL) {
+      // resolving path
+      strcpy(full_path_cmd, each_dir);
+      strcat(full_path_cmd, "/");
+      strcat(full_path_cmd, cmd_argv[0]);
+
+      // can't touch cmd_argv
+      char *cmd_tmp = cmd_argv[0];
+      cmd_argv[0] = full_path_cmd;
+
+      execv(full_path_cmd, cmd_argv);
+
+      // restore original command for next iteration
+      cmd_argv[0] = cmd_tmp;
+    }
+
+    return -1;
+  } else {
+    return execv(cmd_argv[0], cmd_argv);
+  }
+}
+
+/* Only cmd with no pathname specified needs resolution
+ *
+ * case 1. cmd in current dir: ./cmd needs no resolution
+ * case 2. cmd in relative path: foo/bar needs no resolution
+ * case 3. cmd in full path needs no resolution: /usr/bin/wc
+ * */
+bool cmd_pathname_needs_resolution(char *cmd) {
+  return strchr(cmd, '/') == NULL;
 }
 
 
