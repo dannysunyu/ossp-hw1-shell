@@ -36,6 +36,9 @@ int execute_cmd(struct tokens *tokens);
 
 bool cmd_needs_path_resolution(char *cmd);
 
+bool program_needs_io_redirection(struct tokens *tokens);
+void process_redirects_io(int argc, char *argv[]);
+
 /* Built-in command functions take token array (see parse.h) and return int */
 typedef int cmd_fun_t(struct tokens *tokens);
 
@@ -168,14 +171,19 @@ void launch_process(struct tokens *tokens) {
 }
 
 int execute_cmd(struct tokens *tokens) {
-  size_t cmd_line_length = tokens_get_length(tokens);
-  char *cmd_argv[cmd_line_length + 1];
+  size_t cmd_argc = tokens_get_length(tokens);
+  char *cmd_argv[cmd_argc + 1];
 
-  for (int i = 0; i < cmd_line_length; i++) {
+  for (int i = 0; i < cmd_argc; i++) {
     cmd_argv[i] = tokens_get_token(tokens, i);
   }
+
   /* execv requires the last element of this array must be a null pointer */
-  cmd_argv[cmd_line_length] = NULL;
+  cmd_argv[cmd_argc] = NULL;
+
+  if (program_needs_io_redirection(tokens)) {
+    process_redirects_io(cmd_argc, cmd_argv);
+  }
 
   if (cmd_needs_path_resolution(cmd_argv[0])) {
     char *path_env = getenv("PATH");
@@ -214,4 +222,32 @@ bool cmd_needs_path_resolution(char *cmd) {
   return strchr(cmd, '/') == NULL;
 }
 
+bool program_needs_io_redirection(struct tokens *tokens) {
+  size_t length = tokens_get_length(tokens);
+
+  for (int i = 0; i < length; i++) {
+    char *token = tokens_get_token(tokens, i);
+    if (strcmp(token, "<") == 0 || strcmp(token, ">") == 0) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+void process_redirects_io(int argc, char **argv) {
+  for (int i = 0; i < argc; i++) {
+    if (strcmp("<", argv[i]) == 0) {
+      FILE *file = fopen(argv[i + 1], "r");
+      dup2(fileno(file), STDIN_FILENO);
+      argv[i] = NULL;
+      return;
+    } else if (strcmp(">", argv[i]) == 0) {
+      FILE *file = fopen(argv[i + 1], "w");
+      dup2(fileno(file), STDOUT_FILENO);
+      argv[i] = NULL;
+      return;
+    }
+  }
+}
 
