@@ -34,9 +34,18 @@ int cmd_cd(struct tokens *tokens);
 void launch_process(struct tokens *tokens);
 int execute_cmd(struct tokens *tokens);
 
+/* Only cmd with no pathname specified needs resolution
+ *
+ * case 1. cmd in current dir: ./cmd needs no resolution
+ * case 2. cmd in relative path: foo/bar needs no resolution
+ * case 3. cmd in full path needs no resolution: /usr/bin/wc
+ * */
 bool cmd_needs_path_resolution(char *cmd);
 
+/* Whether the command line needs input/output redirection. */
 bool program_needs_io_redirection(struct tokens *tokens);
+
+/* Performs input/output redirection. */
 void process_redirects_io(int argc, char *argv[]);
 
 /* Built-in command functions take token array (see parse.h) and return int */
@@ -212,12 +221,7 @@ int execute_cmd(struct tokens *tokens) {
   }
 }
 
-/* Only cmd with no pathname specified needs resolution
- *
- * case 1. cmd in current dir: ./cmd needs no resolution
- * case 2. cmd in relative path: foo/bar needs no resolution
- * case 3. cmd in full path needs no resolution: /usr/bin/wc
- * */
+
 bool cmd_needs_path_resolution(char *cmd) {
   return strchr(cmd, '/') == NULL;
 }
