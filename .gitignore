@@ -2,3 +2,14 @@
 
 *.o
 shell
+
+simple_test
+simple_test.c
+
+sleep_task
+sleep_task.c
+
+wc
+wc.c
+
+*.log

@@ -48,7 +48,14 @@ bool program_needs_io_redirection(struct tokens *tokens);
 /* Performs input/output redirection. */
 void process_redirects_io(int argc, char *argv[]);
 
-void init_child_signal_handlers();
+bool program_needs_put_in_background(struct tokens *tokens);
+
+void init_child_process();
+
+void put_process_in_foreground(pid_t pid);
+void put_process_in_background(pid_t pid);
+
+void cmd_line_remove_put_process_in_background_flag(char *cmd_argv[]);
 
 /* Built-in command functions take token array (see parse.h) and return int */
 typedef int cmd_fun_t(struct tokens *tokens);
@@ -178,19 +185,18 @@ void launch_process(struct tokens *tokens) {
   setpgid(pid, pid);
 
   if (pid == 0) { /* Child */
-    init_child_signal_handlers();
+    init_child_process();
     if (execute_cmd(tokens) == -1) {
       fprintf(stdout, "This shell doesn't know how to run programs.\n");
       exit(1);
     }
   } else { /* Parent */
-    /* set the forked process to foreground process group */
-    tcsetpgrp(shell_terminal, pid);
-    wait(NULL);
-    tcsetpgrp(shell_terminal, shell_pgid);
-
-    /* Restore previous termios */
-    tcsetattr(shell_terminal, TCSADRAIN, &shell_tmodes);
+    if (program_needs_put_in_background(tokens)) {
+      put_process_in_background(pid);
+    } else {
+      /* set the forked process to foreground process group */
+      put_process_in_foreground(pid);
+    }
   }
 }
 
@@ -207,6 +213,10 @@ int execute_cmd(struct tokens *tokens) {
 
   if (program_needs_io_redirection(tokens)) {
     process_redirects_io(cmd_argc, cmd_argv);
+  }
+
+  if (program_needs_put_in_background(tokens)) {
+    cmd_line_remove_put_process_in_background_flag(cmd_argv);
   }
 
   if (cmd_needs_path_resolution(cmd_argv[0])) {
@@ -270,8 +280,44 @@ void process_redirects_io(int argc, char **argv) {
   }
 }
 
-void init_child_signal_handlers() {
+void init_child_process() {
   signal(SIGINT, SIG_DFL);
   signal(SIGTSTP, SIG_DFL);
   signal(SIGTTOU, SIG_DFL);
+}
+
+bool program_needs_put_in_background(struct tokens *tokens) {
+  size_t length = tokens_get_length(tokens);
+
+  for (int i = 0; i < length; i++) {
+    char *token = tokens_get_token(tokens, i);
+    if (strcmp(token, "&") == 0) {
+      return true;
+    }
+  }
+  return false;
+}
+
+void put_process_in_foreground(pid_t pid) {
+  tcsetpgrp(shell_terminal, pid);
+  wait(NULL);
+  tcsetpgrp(shell_terminal, shell_pgid);
+
+  /* Restore previous termios */
+  tcsetattr(shell_terminal, TCSADRAIN, &shell_tmodes);
+}
+
+void put_process_in_background(pid_t pid) {
+//  kill(-pid, SIGCONT);
+}
+
+void cmd_line_remove_put_process_in_background_flag(char *argv[]) {
+  int i = 0;
+  while (argv[i] != NULL) {
+    if (strcmp(argv[i], "&") == 0) {
+      argv[i] = NULL;
+      break;
+    }
+    i++;
+  }
 }
