@@ -48,6 +48,8 @@ bool program_needs_io_redirection(struct tokens *tokens);
 /* Performs input/output redirection. */
 void process_redirects_io(int argc, char *argv[]);
 
+void init_child_signal_handlers();
+
 /* Built-in command functions take token array (see parse.h) and return int */
 typedef int cmd_fun_t(struct tokens *tokens);
 
@@ -121,6 +123,11 @@ void init_shell() {
     while (tcgetpgrp(shell_terminal) != (shell_pgid = getpgrp()))
       kill(-shell_pgid, SIGTTIN);
 
+    /* Ignore interactive and job-control signals. */
+    signal(SIGINT, SIG_IGN);
+    signal(SIGTSTP, SIG_IGN);
+    signal(SIGTTOU, SIG_IGN);
+
     /* Saves the shell's process id */
     shell_pgid = getpid();
 
@@ -168,14 +175,22 @@ int main(int argc, char *argv[]) {
 
 void launch_process(struct tokens *tokens) {
   pid_t pid = fork();
+  setpgid(pid, pid);
 
   if (pid == 0) { /* Child */
+    init_child_signal_handlers();
     if (execute_cmd(tokens) == -1) {
       fprintf(stdout, "This shell doesn't know how to run programs.\n");
       exit(1);
     }
   } else { /* Parent */
+    /* set the forked process to foreground process group */
+    tcsetpgrp(shell_terminal, pid);
     wait(NULL);
+    tcsetpgrp(shell_terminal, shell_pgid);
+
+    /* Restore previous termios */
+    tcsetattr(shell_terminal, TCSADRAIN, &shell_tmodes);
   }
 }
 
@@ -255,3 +270,8 @@ void process_redirects_io(int argc, char **argv) {
   }
 }
 
+void init_child_signal_handlers() {
+  signal(SIGINT, SIG_DFL);
+  signal(SIGTSTP, SIG_DFL);
+  signal(SIGTTOU, SIG_DFL);
+}
