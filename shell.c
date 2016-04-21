@@ -9,7 +9,6 @@
 #include <sys/wait.h>
 #include <termios.h>
 #include <unistd.h>
-#include <errno.h>
 
 #include "tokenizer.h"
 
